@@ -182,3 +182,9 @@ button:focus-visible, input:focus-visible, .arow:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ---- Calendar event rows ---- */
+.evrow { display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+.evrow:last-of-type { border-bottom: none; }
+.evrow .lead { color: var(--ink); display: flex; }
+.evrow .lead .ic { width: 20px; height: 20px; }
