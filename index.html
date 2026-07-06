@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <title>Personal Dashboard</title>
+  <meta name="description" content="A simple, private personal dashboard. All data stays on your device.">
+  <meta name="theme-color" content="#F6F5F0" id="theme-color-meta">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Dashboard">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app">
+    <main id="view" class="view" role="main"></main>
+
+    <nav class="nav" id="nav" aria-label="Primary">
+      <button class="nav-btn" data-route="today" type="button">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l-2 0l9 -9l9 9l-2 0"/><path d="M5 12v7a1 1 0 0 0 1 1h12a1 1 0 0 0 1 -1v-7"/><path d="M9 21v-6h6v6"/></svg>
+        <span>Today</span>
+      </button>
+      <button class="nav-btn" data-route="areas" type="button">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6h-6z"/><path d="M14 4h6v6h-6z"/><path d="M4 14h6v6h-6z"/><path d="M14 14h6v6h-6z"/></svg>
+        <span>Areas</span>
+      </button>
+      <button class="nav-btn" data-route="calendar" type="button">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2z"/><path d="M16 3v4"/><path d="M8 3v4"/><path d="M4 11h16"/></svg>
+        <span>Calendar</span>
+      </button>
+      <button class="nav-btn" data-route="backup" type="button">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z"/><path d="M5 8v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-10"/><path d="M10 12h4"/></svg>
+        <span>Backup</span>
+      </button>
+    </nav>
+  </div>
+
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
