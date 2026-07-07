@@ -2,7 +2,7 @@
 // Network-first: when online you always get the latest version (handy after a
 // redeploy); when offline you fall back to the cached copy.
 
-const CACHE = 'dashboard-v2';
+const CACHE = 'dashboard-v3';
 const ASSETS = [
   './',
   './index.html',

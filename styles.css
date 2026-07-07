@@ -188,3 +188,13 @@ button:focus-visible, input:focus-visible, .arow:focus-visible {
 .evrow:last-of-type { border-bottom: none; }
 .evrow .lead { color: var(--ink); display: flex; }
 .evrow .lead .ic { width: 20px; height: 20px; }
+
+/* ---- Goals notepad ---- */
+.notepad {
+  width: 100%; min-height: 52vh; margin-top: 14px; box-sizing: border-box;
+  background: var(--field); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; font: inherit; font-size: 16px; line-height: 1.55; color: var(--ink);
+  resize: vertical; outline: none;
+}
+.notepad:focus { border-color: var(--ink); }
+.savehint { font-size: 12px; color: var(--muted); margin-top: 8px; height: 16px; }

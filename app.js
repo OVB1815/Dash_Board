@@ -8,7 +8,7 @@
 /*  Storage (IndexedDB)                                               */
 /* ------------------------------------------------------------------ */
 const DB_NAME = 'personal-dashboard';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 let _dbPromise = null;
 
 function openDB() {
@@ -21,6 +21,7 @@ function openDB() {
       if (!db.objectStoreNames.contains('tasks')) db.createObjectStore('tasks', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('weights')) db.createObjectStore('weights', { keyPath: 'date' });
       if (!db.objectStoreNames.contains('events')) db.createObjectStore('events', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('notes')) db.createObjectStore('notes', { keyPath: 'id' });
       // v1 -> v2: existing tasks had no list; default them to Personal.
       if (e.oldVersion >= 1 && db.objectStoreNames.contains('tasks')) {
         const store = tx.objectStore('tasks');
@@ -346,9 +347,9 @@ async function renderAreas() {
       <button class="arow" data-go="health"><span class="lead">${ic('heart')}</span><span class="name">Health</span><span class="amt">${weights.length ? weights.length + ' logged' : '—'}</span><span class="chev">${ic('chevR')}</span></button>
       <button class="arow" data-go="work"><span class="lead">${ic('briefcase')}</span><span class="name">Work</span><span class="amt">${amt(openWork)}</span><span class="chev">${ic('chevR')}</span></button>
       <button class="arow" data-go="personal"><span class="lead">${ic('user')}</span><span class="name">Personal</span><span class="amt">${amt(openPersonal)}</span><span class="chev">${ic('chevR')}</span></button>
-      <div class="arow soon"><span class="lead">${ic('target')}</span><span class="name">Goals</span><span class="amt">soon</span></div>
+      <button class="arow" data-go="goals"><span class="lead">${ic('target')}</span><span class="name">Goals</span><span class="amt">notepad</span><span class="chev">${ic('chevR')}</span></button>
     </div>
-    <div class="note">Birthdays and imported calendars live under the <strong>Calendar</strong> tab. Goals arrives next.</div>
+    <div class="note">Birthdays and imported calendars live under the <strong>Calendar</strong> tab.</div>
   `;
   view().querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go)));
 }
@@ -445,6 +446,31 @@ async function renderTaskList(list) {
 const renderWork = () => renderTaskList('work');
 const renderPersonal = () => renderTaskList('personal');
 
+async function renderGoals() {
+  const notes = await getAll('notes');
+  const goals = notes.find((n) => n.id === 'goals');
+  const text = goals ? goals.text : '';
+  view().innerHTML = `
+    <button class="back" data-back>${ic('chevL')} Areas</button>
+    <h1 class="h1">Goals</h1>
+    <div class="sub">A blank page for whatever you're working toward. Saves as you type.</div>
+    <textarea id="goals-text" class="notepad" placeholder="Write your goals, plans, or notes to yourself…" spellcheck="true">${esc(text)}</textarea>
+    <div class="savehint" id="save-hint">${text ? 'Saved' : ''}</div>
+  `;
+  $('[data-back]').addEventListener('click', () => go('areas'));
+  const ta = $('#goals-text');
+  const hint = $('#save-hint');
+  let timer = null;
+  ta.addEventListener('input', () => {
+    hint.textContent = 'Saving…';
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try { await putItem('notes', { id: 'goals', text: ta.value }); hint.textContent = 'Saved'; }
+      catch (e) { hint.textContent = 'Not saved'; }
+    }, 500);
+  });
+}
+
 async function renderCalendar() {
   const up = await upcomingEvents(60);
   let body;
@@ -493,8 +519,8 @@ async function renderBackup() {
 
 async function exportData() {
   try {
-    const [tasks, weights, events] = await Promise.all([getAll('tasks'), getAll('weights'), getAll('events')]);
-    const bundle = { app: 'personal-dashboard', version: 2, exported: new Date().toISOString(), data: { tasks, weights, events } };
+    const [tasks, weights, events, notes] = await Promise.all([getAll('tasks'), getAll('weights'), getAll('events'), getAll('notes')]);
+    const bundle = { app: 'personal-dashboard', version: 3, exported: new Date().toISOString(), data: { tasks, weights, events, notes } };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -511,10 +537,11 @@ async function importBackup(file) {
   if (!bundle || !bundle.data) { toast('Not a dashboard backup'); return; }
   if (!confirm('Restore this backup? It replaces the data currently in the app.')) return;
   try {
-    await clearStore('tasks'); await clearStore('weights'); await clearStore('events');
+    await clearStore('tasks'); await clearStore('weights'); await clearStore('events'); await clearStore('notes');
     for (const t of bundle.data.tasks || []) await putItem('tasks', t);
     for (const w of bundle.data.weights || []) await putItem('weights', w);
     for (const ev of bundle.data.events || []) await putItem('events', ev);
+    for (const n of bundle.data.notes || []) await putItem('notes', n);
     toast('Backup restored'); go('today');
   } catch (e) { toast('Restore failed'); }
 }
@@ -524,9 +551,9 @@ async function importBackup(file) {
 /* ------------------------------------------------------------------ */
 const ROUTES = {
   today: renderToday, areas: renderAreas, health: renderHealth,
-  work: renderWork, personal: renderPersonal, calendar: renderCalendar, backup: renderBackup
+  work: renderWork, personal: renderPersonal, goals: renderGoals, calendar: renderCalendar, backup: renderBackup
 };
-const NAV_OF = { today: 'today', areas: 'areas', health: 'areas', work: 'areas', personal: 'areas', calendar: 'calendar', backup: 'backup' };
+const NAV_OF = { today: 'today', areas: 'areas', health: 'areas', work: 'areas', personal: 'areas', goals: 'areas', calendar: 'calendar', backup: 'backup' };
 
 let current = 'today';
 async function go(route) {
@@ -562,7 +589,19 @@ function boot() {
   });
   go('today');
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
+    let refreshing = false;
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      // Only auto-reload for genuine updates, not the first install.
+      if (refreshing || !hadController) return;
+      refreshing = true;
+      window.location.reload();
+    });
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js')
+        .then((reg) => { reg.update(); })
+        .catch(() => {});
+    });
   }
 }
 
