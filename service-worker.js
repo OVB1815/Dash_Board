@@ -2,14 +2,13 @@
 // Network-first: when online you always get the latest version (handy after a
 // redeploy); when offline you fall back to the cached copy.
 
-const CACHE = 'dashboard-v3';
+const CACHE = 'dashboard-v4';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.webmanifest',
-  './ical.min.js',
   './icon-180.png',
   './icon-192.png',
   './icon-512.png'

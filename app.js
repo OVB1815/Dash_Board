@@ -211,59 +211,10 @@ function buildGraph(weights) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Calendar import (.ics via ICAL)                                   */
+/*  Calendar (manual entry)                                           */
 /* ------------------------------------------------------------------ */
-function parseICS(text, source) {
-  const out = [];
-  const comp = new ICAL.Component(ICAL.parse(text));
-  const vevents = comp.getAllSubcomponents('vevent');
-  const t0 = startOfToday();
-  const horizon = new Date(t0.getTime() + 400 * 86400000);
-  for (const ve of vevents) {
-    let ev;
-    try { ev = new ICAL.Event(ve); } catch (e) { continue; }
-    const id = source + '|' + (ev.uid || ev.summary + Math.random());
-    const title = ev.summary || 'Untitled';
-    const rrule = ve.getFirstPropertyValue('rrule');
-    const yearly = rrule && String(rrule.freq) === 'YEARLY';
-    if (yearly && ev.startDate) {
-      out.push({ id, source, kind: 'birthday', title, month: ev.startDate.month, day: ev.startDate.day });
-      continue;
-    }
-    let when = null, allDay = false;
-    try {
-      if (ev.isRecurring()) {
-        const it = ev.iterator();
-        let tm, guard = 0;
-        while ((tm = it.next()) && guard++ < 800) {
-          const d = tm.toJSDate();
-          if (d >= t0) { when = d; allDay = tm.isDate; break; }
-          if (d > horizon) break;
-        }
-      } else if (ev.startDate) {
-        const d = ev.startDate.toJSDate();
-        if (d >= t0) { when = d; allDay = ev.startDate.isDate; }
-      }
-    } catch (e) { when = null; }
-    if (when && when <= horizon) {
-      out.push({ id, source, kind: 'event', title, when: when.toISOString(), allDay });
-    }
-  }
-  return out;
-}
 
-async function importICS(file) {
-  if (typeof ICAL === 'undefined') { toast('Calendar reader did not load'); return; }
-  let text;
-  try { text = await file.text(); } catch (e) { toast('Could not read that file'); return; }
-  let records;
-  try { records = parseICS(text, file.name); } catch (e) { toast('That is not a calendar file'); return; }
-  const existing = await getAll('events');
-  for (const ex of existing) if (ex.source === file.name) await delItem('events', ex.id);
-  for (const r of records) await putItem('events', r);
-  toast(records.length ? `Imported ${records.length} date${records.length === 1 ? '' : 's'}` : 'No upcoming dates found');
-  go('calendar');
-}
+
 
 async function upcomingEvents(limit) {
   const evs = await getAll('events');
@@ -273,7 +224,7 @@ async function upcomingEvents(limit) {
     let date;
     if (e.kind === 'birthday') date = nextBirthday(e.month, e.day);
     else { date = new Date(e.when); if (date < t0) continue; }
-    list.push({ kind: e.kind, title: e.title, source: e.source, date });
+    list.push({ id: e.id, kind: e.kind, title: e.title, note: e.note, date });
   }
   list.sort((a, b) => a.date - b.date);
   return limit ? list.slice(0, limit) : list;
@@ -472,32 +423,62 @@ async function renderGoals() {
 }
 
 async function renderCalendar() {
-  const up = await upcomingEvents(60);
-  let body;
+  const up = await upcomingEvents(200);
+  let list;
   if (up.length === 0) {
-    body = `<div class="empty">No dates yet. Import a calendar file (<code>.ics</code>) exported from iCloud or Outlook, and your upcoming birthdays and events will appear here.</div>
-      <button class="btn block" id="do-import-ics">${ic('upload')} &nbsp;Import calendar file</button>`;
+    list = `<div class="empty">Nothing scheduled yet. Add a date above — a golf round, an appointment, a birthday.</div>`;
   } else {
-    body = up.map((e) => `
-      <div class="evrow"><span class="lead">${ic(e.kind === 'birthday' ? 'cake' : 'calEvent')}</span>
-        <div class="grow"><div>${esc(e.title)}</div><div class="meta">${fmtEventDate(e.date)} · ${relLabel(e.date)}</div></div></div>`).join('');
-    body += `<button class="btn block" id="do-import-ics">${ic('upload')} &nbsp;Import / refresh a calendar</button>
-      <button class="btn block ghost" id="do-clear-ics">Remove all imported dates</button>`;
+    list = up.map((e) => `
+      <div class="evrow" data-id="${e.id}"><span class="lead">${ic(e.kind === 'birthday' ? 'cake' : 'calEvent')}</span>
+        <div class="grow"><div>${esc(e.title)}</div><div class="meta">${fmtEventDate(e.date)} · ${relLabel(e.date)}${e.note ? ' · ' + esc(e.note) : ''}</div></div>
+        <button class="del" data-act="del" aria-label="Delete date">${ic('trash')}</button></div>`).join('');
   }
 
   view().innerHTML = `
     <h1 class="h1">Calendar</h1>
-    <div class="sub">Birthdays and important dates</div>
-    <div style="margin-top:14px">${body}</div>
-    <div class="note">Imported dates are a snapshot. Re-import the file to refresh after your calendar changes.</div>
+    <div class="sub">Your dates — golf, appointments, birthdays</div>
+    <div class="addcard">
+      <input id="ev-title" type="text" placeholder="What is it? (e.g. Golf at Manakiki)" autocomplete="off" />
+      <input id="ev-date" type="date" aria-label="Date" />
+      <label class="checkrow"><input id="ev-yearly" type="checkbox" /> Repeats every year (birthday, anniversary)</label>
+      <input id="ev-note" type="text" placeholder="Note — optional (e.g. 8am tee time)" autocomplete="off" />
+      <button class="btn block" id="ev-add">Add date</button>
+    </div>
+    <div class="sec">Upcoming</div>
+    ${list}
+    ${up.length ? `<button class="btn block ghost" id="ev-clear" style="margin-top:14px">Clear all dates</button>` : ''}
+    <div class="note">Dates stay on this device, like everything else, and are included in your backup.</div>
   `;
 
-  const imp = $('#do-import-ics');
-  if (imp) imp.addEventListener('click', () => document.getElementById('ics-file').click());
-  const clr = $('#do-clear-ics');
+  const titleEl = $('#ev-title'), dateEl = $('#ev-date'), yearlyEl = $('#ev-yearly'), noteEl = $('#ev-note');
+  $('#ev-add').addEventListener('click', async () => {
+    const title = titleEl.value.trim();
+    const dv = dateEl.value; // YYYY-MM-DD
+    if (!title) { toast('Add a title'); return; }
+    if (!dv) { toast('Pick a date'); return; }
+    const [y, m, d] = dv.split('-').map(Number);
+    const note = noteEl.value.trim();
+    let rec;
+    if (yearlyEl.checked) {
+      rec = { id: uid(), source: 'manual', kind: 'birthday', title, month: m, day: d, note };
+    } else {
+      rec = { id: uid(), source: 'manual', kind: 'event', title, when: new Date(y, m - 1, d, 12, 0, 0).toISOString(), allDay: true, note };
+    }
+    await putItem('events', rec);
+    toast('Added');
+    renderCalendar();
+  });
+
+  view().querySelectorAll('.evrow [data-act="del"]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      await delItem('events', b.closest('.evrow').dataset.id);
+      renderCalendar();
+    }));
+
+  const clr = $('#ev-clear');
   if (clr) clr.addEventListener('click', async () => {
-    if (!confirm('Remove all imported calendar dates? Your tasks and health data are not affected.')) return;
-    await clearStore('events'); toast('Imported dates removed'); renderCalendar();
+    if (!confirm('Clear all dates? Your tasks, health, and goals are not affected.')) return;
+    await clearStore('events'); toast('All dates cleared'); renderCalendar();
   });
 }
 
@@ -583,9 +564,6 @@ function boot() {
   document.querySelectorAll('.nav-btn').forEach((b) => b.addEventListener('click', () => go(b.dataset.route)));
   document.getElementById('import-file').addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importBackup(f);
-  });
-  document.getElementById('ics-file').addEventListener('change', (e) => {
-    const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) importICS(f);
   });
   go('today');
   if ('serviceWorker' in navigator) {
